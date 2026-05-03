@@ -18,6 +18,7 @@ export default function CaixinhasPage() {
   const [loading, setLoading] = useState(true);
   const [hasMounted, setHasMounted] = useState(false);
   const [isNewOpen, setIsNewOpen] = useState(false);
+  const [editingPocket, setEditingPocket] = useState<Pocket | null>(null);
 
   const fetchPockets = async () => {
     setLoading(true);
@@ -42,14 +43,66 @@ export default function CaixinhasPage() {
     fetchPockets();
   }, []);
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = async (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
     if (!confirm("Excluir esta caixinha? O saldo nela será perdido.")) return;
     const { error } = await supabase.from("pockets").delete().eq("id", id);
     if (error) alert("Erro ao excluir.");
     else fetchPockets();
   };
 
+  const handleEdit = (pocket: Pocket) => {
+    setEditingPocket(pocket);
+    setIsNewOpen(true);
+  };
+
+  const handleTransaction = async (e: React.MouseEvent, pocket: Pocket, isDeposit: boolean) => {
+    e.stopPropagation();
+    
+    const actionName = isDeposit ? "Guardar" : "Resgatar";
+    const amountStr = prompt(`Qual valor você deseja ${actionName}?`);
+    if (!amountStr) return;
+
+    const amount = parseFloat(amountStr.replace(/\./g, "").replace(",", "."));
+    if (isNaN(amount) || amount <= 0) {
+      alert("Valor inválido.");
+      return;
+    }
+
+    if (!isDeposit && amount > pocket.current_amount) {
+      alert("Saldo insuficiente na caixinha para resgate.");
+      return;
+    }
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    // 1. Atualizar saldo da caixinha
+    const newAmount = isDeposit ? pocket.current_amount + amount : pocket.current_amount - amount;
+    const { error: pocketError } = await supabase
+      .from("pockets")
+      .update({ current_amount: newAmount })
+      .eq("id", pocket.id);
+
+    if (pocketError) {
+      alert(`Erro ao ${actionName.toLowerCase()}: ` + pocketError.message);
+      return;
+    }
+
+    // 2. Criar transação no fluxo de caixa
+    await supabase.from("transactions").insert([{
+      user_id: user.id,
+      description: `${isDeposit ? 'Guardado em' : 'Resgate de'}: ${pocket.title}`,
+      amount: amount,
+      type: isDeposit ? 'out' : 'in', // Guardar é saída do saldo, resgatar é entrada
+      category: 'Metas'
+    }]);
+
+    fetchPockets();
+  };
+
   const handleCreateDefaults = async () => {
+    // ... logic remains
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
@@ -85,7 +138,7 @@ export default function CaixinhasPage() {
               </button>
             )}
             <button 
-              onClick={() => setIsNewOpen(true)}
+              onClick={() => { setEditingPocket(null); setIsNewOpen(true); }}
               className="bg-foreground text-background px-6 py-3 text-xs font-black uppercase tracking-widest sharp-border hover:bg-[#e0e0e0] active:scale-95 transition-all"
             >
               + Nova Caixinha
@@ -108,10 +161,14 @@ export default function CaixinhasPage() {
               const progress = Math.min((pocket.current_amount / pocket.goal_amount) * 100, 100);
               
               return (
-                <div key={pocket.id} className="bg-surface p-8 sharp-border border border-border group hover:border-primary transition-all relative overflow-hidden">
+                <div 
+                  key={pocket.id} 
+                  onClick={() => handleEdit(pocket)}
+                  className="bg-surface p-8 sharp-border border border-border group hover:border-primary transition-all relative overflow-hidden cursor-pointer"
+                >
                   <button 
-                    onClick={() => handleDelete(pocket.id)}
-                    className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity font-mono text-[9px] uppercase text-red-500 hover:font-bold"
+                    onClick={(e) => handleDelete(e, pocket.id)}
+                    className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity font-mono text-[9px] uppercase text-red-500 hover:font-bold p-2"
                   >
                     [ Excluir ]
                   </button>
@@ -140,8 +197,18 @@ export default function CaixinhasPage() {
                   </div>
 
                   <div className="flex gap-2">
-                    <button className="flex-1 bg-foreground text-background py-3 text-[10px] font-bold uppercase tracking-widest hover:bg-white transition-colors sharp-border">Guardar</button>
-                    <button className="flex-1 border border-border text-muted py-3 text-[10px] font-bold uppercase tracking-widest hover:border-foreground hover:text-foreground transition-colors sharp-border">Resgatar</button>
+                    <button 
+                      onClick={(e) => handleTransaction(e, pocket, true)} 
+                      className="flex-1 bg-foreground text-background py-3 text-[10px] font-bold uppercase tracking-widest hover:bg-white transition-colors sharp-border"
+                    >
+                      Guardar
+                    </button>
+                    <button 
+                      onClick={(e) => handleTransaction(e, pocket, false)} 
+                      className="flex-1 border border-border text-muted py-3 text-[10px] font-bold uppercase tracking-widest hover:border-foreground hover:text-foreground transition-colors sharp-border"
+                    >
+                      Resgatar
+                    </button>
                   </div>
                 </div>
               );
@@ -154,6 +221,7 @@ export default function CaixinhasPage() {
         isOpen={isNewOpen} 
         onClose={() => setIsNewOpen(false)} 
         onSuccess={fetchPockets} 
+        pocket={editingPocket}
       />
     </div>
   );

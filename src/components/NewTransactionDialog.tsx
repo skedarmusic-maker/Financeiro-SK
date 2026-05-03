@@ -18,6 +18,7 @@ const EXPENSE_CATEGORIES = [
 
 const INCOME_CATEGORIES = [
   { label: "Salário", emoji: "💰" },
+  { label: "Benefícios", emoji: "💳" },
   { label: "Rendimentos", emoji: "📈" },
   { label: "Vendas", emoji: "🛍" },
   { label: "Freelance", emoji: "💻" },
@@ -46,6 +47,8 @@ export function TransactionDialog({ isOpen, onClose, onSuccess, transaction }: T
   const [type, setType] = useState<"out" | "in">("out");
   const [amount, setAmount] = useState("");
   const [description, setDescription] = useState("");
+  const [date, setDate] = useState("");
+  const [isRecurring, setIsRecurring] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -63,11 +66,15 @@ export function TransactionDialog({ isOpen, onClose, onSuccess, transaction }: T
         setDescription(transaction.description);
         setSelectedCategory(transaction.category);
         setAmount(transaction.amount.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+        setDate(transaction.id ? "" : new Date().toISOString().split('T')[0]); // Fallback se tiver data depois
+        setIsRecurring(false);
       } else {
         setType("out");
         setDescription("");
         setSelectedCategory(null);
         setAmount("");
+        setDate(new Date().toISOString().split('T')[0]);
+        setIsRecurring(false);
       }
       setTimeout(() => inputRef.current?.focus(), 100);
     } else {
@@ -76,7 +83,7 @@ export function TransactionDialog({ isOpen, onClose, onSuccess, transaction }: T
   }, [isOpen, transaction]);
 
   const handleConfirm = async () => {
-    if (!amount || isSubmitting) return;
+    if (!amount || isSubmitting || !date) return;
     setIsSubmitting(true);
 
     try {
@@ -87,7 +94,7 @@ export function TransactionDialog({ isOpen, onClose, onSuccess, transaction }: T
       }
 
       const numericAmount = parseFloat(amount.replace(/\./g, "").replace(",", "."));
-      const payload = {
+      const basePayload = {
         description: description || (type === "in" ? "Receita" : "Gasto"),
         amount: numericAmount,
         type,
@@ -96,11 +103,30 @@ export function TransactionDialog({ isOpen, onClose, onSuccess, transaction }: T
       };
 
       let error;
+
       if (transaction?.id) {
-        const { error: err } = await supabase.from("transactions").update(payload).eq("id", transaction.id);
+        // Atualização simples (recorrência não se aplica aqui)
+        const { error: err } = await supabase.from("transactions").update({ ...basePayload, created_at: new Date(date).toISOString() }).eq("id", transaction.id);
         error = err;
       } else {
-        const { error: err } = await supabase.from("transactions").insert([payload]);
+        // Inserção nova (pode ter recorrência)
+        const payloadsToInsert = [];
+        const startDate = new Date(date);
+        
+        const monthsToGenerate = isRecurring ? 12 : 1;
+
+        for (let i = 0; i < monthsToGenerate; i++) {
+          const currentTxDate = new Date(startDate);
+          currentTxDate.setMonth(currentTxDate.getMonth() + i);
+          
+          payloadsToInsert.push({
+            ...basePayload,
+            description: isRecurring ? `${basePayload.description} (${i+1}/12)` : basePayload.description,
+            created_at: currentTxDate.toISOString()
+          });
+        }
+
+        const { error: err } = await supabase.from("transactions").insert(payloadsToInsert);
         error = err;
       }
 
@@ -179,13 +205,36 @@ export function TransactionDialog({ isOpen, onClose, onSuccess, transaction }: T
           </div>
         </div>
 
-        <div>
-          <label style={{ display: 'block', color: '#666', fontSize: '10px', fontWeight: 'bold', marginBottom: '8px' }}>DESCRIÇÃO</label>
-          <input 
-            type="text" value={description} onChange={(e) => setDescription(e.target.value)}
-            placeholder="Ex: Almoço, Salário..."
-            style={{ width: '100%', backgroundColor: '#050505', border: '1px solid #222', padding: '16px', color: '#f0f0f0', outline: 'none', fontSize: '14px', fontWeight: '500' }}
-          />
+        <div style={{ display: 'flex', gap: '16px', flexDirection: 'column', sm: { flexDirection: 'row' } } as any}>
+          <div style={{ display: 'flex', gap: '16px', width: '100%' }}>
+            <div style={{ flex: 1 }}>
+              <label style={{ display: 'block', color: '#666', fontSize: '10px', fontWeight: 'bold', marginBottom: '8px' }}>DATA</label>
+              <input 
+                type="date" value={date} onChange={(e) => setDate(e.target.value)}
+                style={{ width: '100%', backgroundColor: '#050505', border: '1px solid #222', padding: '16px', color: '#f0f0f0', outline: 'none', fontSize: '14px', fontWeight: '500', colorScheme: 'dark' }}
+              />
+            </div>
+            {!transaction && (
+              <div style={{ flex: 1, display: 'flex', alignItems: 'flex-end' }}>
+                <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', cursor: 'pointer', padding: '16px', border: `1px solid ${isRecurring ? '#CCFF00' : '#222'}`, backgroundColor: isRecurring ? 'rgba(204,255,0,0.1)' : '#050505', width: '100%', color: isRecurring ? '#CCFF00' : '#f0f0f0', transition: 'all 0.2s' }}>
+                  <input 
+                    type="checkbox" checked={isRecurring} onChange={(e) => setIsRecurring(e.target.checked)}
+                    style={{ accentColor: '#CCFF00', width: '16px', height: '16px' }}
+                  />
+                  <span style={{ fontSize: '10px', fontWeight: 'bold', textTransform: 'uppercase' }}>Repetir 12x</span>
+                </label>
+              </div>
+            )}
+          </div>
+
+          <div style={{ width: '100%' }}>
+            <label style={{ display: 'block', color: '#666', fontSize: '10px', fontWeight: 'bold', marginBottom: '8px' }}>DESCRIÇÃO</label>
+            <input 
+              type="text" value={description} onChange={(e) => setDescription(e.target.value)}
+              placeholder="Ex: Almoço, Salário..."
+              style={{ width: '100%', backgroundColor: '#050505', border: '1px solid #222', padding: '16px', color: '#f0f0f0', outline: 'none', fontSize: '14px', fontWeight: '500' }}
+            />
+          </div>
         </div>
 
         <div>

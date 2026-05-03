@@ -4,13 +4,22 @@ import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { supabase } from "@/lib/supabase";
 
+interface Pocket {
+  id: string;
+  title: string;
+  icon: string;
+  goal_amount: number;
+  current_amount: number;
+}
+
 interface NewPocketDialogProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: () => void;
+  pocket?: Pocket | null; // Adicionado para edição
 }
 
-export function NewPocketDialog({ isOpen, onClose, onSuccess }: NewPocketDialogProps) {
+export function NewPocketDialog({ isOpen, onClose, onSuccess, pocket }: NewPocketDialogProps) {
   const [title, setTitle] = useState("");
   const [goal, setGoal] = useState("");
   const [icon, setIcon] = useState("💰");
@@ -19,7 +28,16 @@ export function NewPocketDialog({ isOpen, onClose, onSuccess }: NewPocketDialogP
 
   useEffect(() => {
     setHasMounted(true);
-  }, []);
+    if (pocket) {
+      setTitle(pocket.title);
+      setGoal(pocket.goal_amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 }));
+      setIcon(pocket.icon);
+    } else {
+      setTitle("");
+      setGoal("");
+      setIcon("💰");
+    }
+  }, [pocket, isOpen]);
 
   const handleSave = async () => {
     if (!title || !goal) return;
@@ -28,16 +46,30 @@ export function NewPocketDialog({ isOpen, onClose, onSuccess }: NewPocketDialogP
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    const { error } = await supabase.from("pockets").insert([{
-      title,
-      goal_amount: parseFloat(goal.replace(/\./g, "").replace(",", ".")),
-      icon,
-      user_id: user.id,
-      current_amount: 0
-    }]);
+    const goalNum = parseFloat(goal.replace(/\./g, "").replace(",", "."));
+
+    let error;
+    if (pocket) {
+      // Edição
+      const { error: updateError } = await supabase
+        .from("pockets")
+        .update({ title, goal_amount: goalNum, icon })
+        .eq("id", pocket.id);
+      error = updateError;
+    } else {
+      // Criação
+      const { error: insertError } = await supabase.from("pockets").insert([{
+        title,
+        goal_amount: goalNum,
+        icon,
+        user_id: user.id,
+        current_amount: 0
+      }]);
+      error = insertError;
+    }
 
     if (error) {
-      alert("Erro ao criar caixinha: " + error.message);
+      alert("Erro ao salvar caixinha: " + error.message);
     } else {
       onSuccess();
       onClose();
@@ -56,7 +88,9 @@ export function NewPocketDialog({ isOpen, onClose, onSuccess }: NewPocketDialogP
           [ fechar ]
         </button>
 
-        <h2 className="text-3xl font-black tracking-tighter uppercase mb-8">Nova Caixinha</h2>
+        <h2 className="text-3xl font-black tracking-tighter uppercase mb-8">
+          {pocket ? "Editar Caixinha" : "Nova Caixinha"}
+        </h2>
 
         <div className="flex flex-col gap-6">
           <div>
@@ -97,7 +131,7 @@ export function NewPocketDialog({ isOpen, onClose, onSuccess }: NewPocketDialogP
             disabled={isSubmitting || !title || !goal}
             className="w-full bg-primary text-black font-black py-5 text-xs uppercase tracking-[0.3em] sharp-border hover:bg-[#b3e600] transition-all disabled:opacity-50"
           >
-            {isSubmitting ? "CRIANDO..." : "CRIAR OBJETIVO"}
+            {isSubmitting ? "SALVANDO..." : pocket ? "SALVAR ALTERAÇÕES" : "CRIAR OBJETIVO"}
           </button>
         </div>
       </div>
