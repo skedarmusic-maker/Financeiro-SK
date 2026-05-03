@@ -154,11 +154,19 @@ export default function LancamentosPage() {
                   </div>
                   <div className="hidden md:block col-span-2 font-mono text-[10px] text-muted uppercase tracking-wider">
                     {new Date(tx.created_at).toLocaleDateString('pt-BR')}
+                    {new Date(tx.created_at) > new Date() && (
+                      <span className="block mt-1 text-[8px] bg-primary/20 text-primary px-1 py-0.5 w-fit sharp-border">A VENCER</span>
+                    )}
                   </div>
                   <div className="col-span-1 md:col-span-2 flex justify-between md:justify-end items-center mt-2 md:mt-0">
-                    <div className="md:hidden flex gap-2">
+                    <div className="md:hidden flex gap-2 items-center">
                        <span className="font-mono text-[10px] uppercase text-muted bg-surface px-2 py-1 border border-border">{tx.category}</span>
-                       <span className="font-mono text-[10px] uppercase text-muted py-1">{new Date(tx.created_at).toLocaleDateString('pt-BR')}</span>
+                       <span className="font-mono text-[10px] uppercase text-muted py-1 flex items-center gap-1">
+                         {new Date(tx.created_at).toLocaleDateString('pt-BR')}
+                         {new Date(tx.created_at) > new Date() && (
+                            <span className="text-[8px] bg-primary/20 text-primary px-1 py-0.5 sharp-border">A VENCER</span>
+                         )}
+                       </span>
                     </div>
                     <div className="flex flex-col items-end gap-1">
                       <p className={`font-mono text-lg font-black tracking-tight ${tx.type === 'in' ? 'text-primary' : 'text-foreground'}`}>

@@ -64,14 +64,24 @@ export default function Home() {
 
   // Cálculos
   const totalBalance = initialBalance + transactions.reduce((acc, tx) => {
+    // Apenas transações passadas ou de hoje afetam o saldo real disponível
+    if (new Date(tx.created_at) > new Date()) return acc;
     return tx.type === "in" ? acc + tx.amount : acc - tx.amount;
   }, 0);
 
-  const monthlyIncome = transactions
+  const currentMonth = new Date().getMonth();
+  const currentYear = new Date().getFullYear();
+
+  const currentMonthTransactions = transactions.filter(tx => {
+    const d = new Date(tx.created_at);
+    return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+  });
+
+  const monthlyIncome = currentMonthTransactions
     .filter(tx => tx.type === "in")
     .reduce((acc, tx) => acc + tx.amount, 0);
 
-  const monthlyExpense = transactions
+  const monthlyExpense = currentMonthTransactions
     .filter(tx => tx.type === "out")
     .reduce((acc, tx) => acc + tx.amount, 0);
 
