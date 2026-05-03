@@ -227,7 +227,11 @@ export function TransactionDialog({ isOpen, onClose, onSuccess, transaction }: T
   return createPortal(modalContent, document.body);
 }
 
-export function NewTransactionDialog() {
+interface NewTransactionDialogProps {
+  mobile?: boolean;
+}
+
+export function NewTransactionDialog({ mobile }: NewTransactionDialogProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [hasMounted, setHasMounted] = useState(false);
 
@@ -241,10 +245,13 @@ export function NewTransactionDialog() {
     <>
       <button
         onClick={() => setIsOpen(true)}
-        className="bg-[#CCFF00] text-black font-black px-6 py-2 text-xs uppercase tracking-widest hover:bg-[#b3e600] active:scale-95 transition-all"
+        className={mobile 
+            ? "bg-primary text-black h-12 w-12 flex items-center justify-center text-2xl font-black sharp-border shadow-lg shadow-primary/20 active:scale-90 transition-all"
+            : "bg-[#CCFF00] text-black font-black px-6 py-2 text-xs uppercase tracking-widest hover:bg-[#b3e600] active:scale-95 transition-all"
+        }
         style={{ borderRadius: 0, border: 'none', cursor: 'pointer' }}
       >
-        + NOVA TRANSAÇÃO
+        {mobile ? "+" : "+ NOVA TRANSAÇÃO"}
       </button>
 
       <TransactionDialog 
