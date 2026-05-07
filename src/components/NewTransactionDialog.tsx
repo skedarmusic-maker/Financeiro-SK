@@ -6,6 +6,8 @@ import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
 
 const EXPENSE_CATEGORIES = [
+  { label: "Filha", emoji: "👶" },
+  { label: "iFood", emoji: "🍔" },
   { label: "Alimentação", emoji: "🍽" },
   { label: "Transporte", emoji: "🚗" },
   { label: "Moradia", emoji: "🏠" },
